@@ -21,7 +21,17 @@ class _PreviewScreenState extends State<PreviewScreen> {
     });
 
     try {
-      final path = await _sdk.savePhoto(widget.result.photoBytes);
+      // Save photo using storage manager
+      final bytes = widget.result.photoBytes ?? 
+                    (widget.result.photoBase64 != null 
+                      ? FormatConverter.base64ToBytes(widget.result.photoBase64!)
+                      : null);
+      
+      if (bytes == null) {
+        throw Exception('No photo data available');
+      }
+
+      final path = await _sdk.savePhoto(bytes);
       
       setState(() {
         _savedPath = path;
@@ -56,6 +66,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
   @override
   Widget build(BuildContext context) {
     final location = widget.result.locationData;
+    final photoBytes = widget.result.photoBytes ?? 
+                       (widget.result.photoBase64 != null 
+                         ? FormatConverter.base64ToBytes(widget.result.photoBase64!)
+                         : null);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -84,10 +98,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
           // Photo preview
           Expanded(
             child: Center(
-              child: Image.memory(
-                widget.result.photoBytes,
-                fit: BoxFit.contain,
-              ),
+              child: photoBytes != null
+                  ? Image.memory(
+                      photoBytes,
+                      fit: BoxFit.contain,
+                    )
+                  : const Text(
+                      'No photo data available',
+                      style: TextStyle(color: Colors.white),
+                    ),
             ),
           ),
 
@@ -99,15 +118,56 @@ class _PreviewScreenState extends State<PreviewScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Location Information',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    const Text(
+                      'Location Information',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (widget.result.isMockLocation)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning, size: 14, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text(
+                              'Mock GPS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 12),
+                
+                // Location confidence
+                _buildInfoRow(
+                  Icons.verified,
+                  'Location Confidence',
+                  '${(widget.result.locationConfidence * 100).toStringAsFixed(0)}%',
+                  valueColor: _getConfidenceColor(widget.result.locationConfidence),
+                ),
+                const SizedBox(height: 8),
+                
                 _buildInfoRow(
                   Icons.location_on,
                   'Coordinates',
@@ -131,6 +191,40 @@ class _PreviewScreenState extends State<PreviewScreen> {
                   'Accuracy',
                   '${location.accuracy.toStringAsFixed(1)} meters',
                 ),
+                const SizedBox(height: 8),
+                _buildInfoRow(
+                  Icons.photo_size_select_actual,
+                  'Photo Size',
+                  FormatConverter.formatSize(widget.result.photoSize),
+                ),
+                
+                if (widget.result.isMockLocation) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withAlpha(51), // 0.2 * 255 = 51
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This location was detected as potentially fake. The photo may have been taken with a mock GPS app.',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                
                 if (_savedPath != null) ...[
                   const SizedBox(height: 12),
                   const Divider(color: Colors.white24),
@@ -195,7 +289,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Color _getConfidenceColor(double confidence) {
+    if (confidence >= 0.8) return Colors.green;
+    if (confidence >= 0.5) return Colors.orange;
+    return Colors.red;
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value, {Color? valueColor}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -215,9 +315,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: valueColor ?? Colors.white,
                   fontSize: 14,
+                  fontWeight: valueColor != null ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
             ],

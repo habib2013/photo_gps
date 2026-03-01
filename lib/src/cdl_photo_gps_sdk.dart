@@ -2,11 +2,14 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'models/location_data.dart';
 import 'models/photo_capture_result.dart';
+import 'models/sdk_config.dart';
 import 'services/camera_module.dart';
 import 'services/image_processor.dart';
 import 'services/location_service.dart';
 import 'services/permission_manager.dart';
 import 'services/storage_manager.dart';
+import 'verification/mock_gps_detector.dart';
+import 'utils/format_converter.dart';
 
 /// Main SDK class for GPS Photo Capture functionality.
 ///
@@ -16,7 +19,12 @@ import 'services/storage_manager.dart';
 ///
 /// Example usage:
 /// ```dart
-/// final sdk = CdlPhotoGpsSDK();
+/// final sdk = CdlPhotoGpsSDK(
+///   config: SDKConfig(
+///     outputFormat: OutputFormat.base64,
+///     detectMockGPS: true,
+///   ),
+/// );
 ///
 /// // Initialize
 /// await sdk.initialize();
@@ -29,18 +37,32 @@ import 'services/storage_manager.dart';
 /// // Capture photo with location
 /// final result = await sdk.capturePhotoWithLocation();
 ///
-/// // Save photo
-/// final path = await sdk.savePhoto(result.photoBytes);
+/// // Check if location is fake
+/// if (result.isMockLocation) {
+///   print('Warning: Mock GPS detected!');
+/// }
+///
+/// // Use the result (format depends on config)
+/// final base64 = result.photoBase64; // if OutputFormat.base64
+/// final bytes = result.photoBytes;   // if OutputFormat.bytes
+/// final path = result.filePath;      // if OutputFormat.file
 ///
 /// // Cleanup
 /// await sdk.dispose();
 /// ```
 class CdlPhotoGpsSDK {
+  final SDKConfig config;
+  
   final CameraModule _cameraModule = CameraModule();
   final LocationService _locationService = LocationService();
   final ImageProcessor _imageProcessor = ImageProcessor();
   final PermissionManager _permissionManager = PermissionManager();
   final StorageManager _storageManager = StorageManager();
+  final MockGPSDetector _mockGPSDetector = MockGPSDetector();
+
+  CdlPhotoGpsSDK({
+    this.config = const SDKConfig(),
+  });
 
   /// Get the camera controller for preview widgets
   CameraController? get cameraController => _cameraModule.controller;
@@ -91,24 +113,47 @@ class CdlPhotoGpsSDK {
   /// This is the main SDK method that:
   /// 1. Captures a photo using the camera
   /// 2. Retrieves current GPS location
-  /// 3. Embeds location information on the photo
+  /// 3. Detects mock GPS (if enabled in config)
+  /// 4. Embeds location information on the photo
+  /// 5. Returns result in configured format (bytes/base64/file)
   ///
   /// Parameters:
-  /// - [locationTimeout]: Timeout for GPS retrieval (default: 15 seconds)
+  /// - [locationTimeout]: Timeout for GPS retrieval (uses config default if not specified)
   ///
-  /// Returns: [PhotoCaptureResult] with embedded photo and location data
+  /// Returns: [PhotoCaptureResult] with photo and location data
   ///
   /// Throws: Various exceptions if capture, location, or processing fails
   Future<PhotoCaptureResult> capturePhotoWithLocation({
-    Duration locationTimeout = const Duration(seconds: 15),
+    Duration? locationTimeout,
   }) async {
+    final timeout = locationTimeout ?? config.gpsTimeout;
+
     // Capture photo
     final photoBytes = await _cameraModule.capturePhoto();
 
     // Get location
     final locationData = await _locationService.getCurrentLocation(
-      timeout: locationTimeout,
+      timeout: timeout,
     );
+
+    // Detect mock GPS if enabled
+    bool isMockLocation = false;
+    double locationConfidence = 1.0;
+    
+    if (config.detectMockGPS) {
+      isMockLocation = locationData.isMocked;
+      // Calculate confidence score based on location data
+      // This is a simple implementation - can be enhanced
+      if (isMockLocation) {
+        locationConfidence = 0.2; // Low confidence for mock locations
+      } else if (locationData.accuracy > 100) {
+        locationConfidence = 0.6; // Medium confidence for poor accuracy
+      } else if (locationData.accuracy > 50) {
+        locationConfidence = 0.8; // Good confidence
+      } else {
+        locationConfidence = 1.0; // High confidence
+      }
+    }
 
     // Embed location on photo
     final embeddedPhoto = await _imageProcessor.embedLocationOnPhoto(
@@ -116,9 +161,33 @@ class CdlPhotoGpsSDK {
       locationData: locationData,
     );
 
+    // Convert to requested format
+    Uint8List? resultBytes;
+    String? resultBase64;
+    String? resultFilePath;
+    
+    switch (config.outputFormat) {
+      case OutputFormat.bytes:
+        resultBytes = embeddedPhoto;
+        break;
+      case OutputFormat.base64:
+        resultBase64 = FormatConverter.bytesToBase64(embeddedPhoto);
+        break;
+      case OutputFormat.file:
+        resultFilePath = await FormatConverter.bytesToFile(embeddedPhoto);
+        resultBytes = embeddedPhoto; // Also include bytes for convenience
+        break;
+    }
+
     return PhotoCaptureResult(
-      photoBytes: embeddedPhoto,
+      photoBytes: resultBytes,
+      photoBase64: resultBase64,
+      filePath: resultFilePath,
       locationData: locationData,
+      isMockLocation: isMockLocation,
+      locationConfidence: locationConfidence,
+      captureTimestamp: DateTime.now(),
+      photoSize: embeddedPhoto.length,
     );
   }
 

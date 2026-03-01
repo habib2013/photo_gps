@@ -18,12 +18,16 @@ class LocationData {
   /// Human-readable address (null if geocoding failed or unavailable)
   final String? address;
 
+  /// Whether this location is from a mock/fake GPS provider
+  final bool isMocked;
+
   LocationData({
     required this.latitude,
     required this.longitude,
     required this.accuracy,
     required this.timestamp,
     this.address,
+    this.isMocked = false,
   });
 
   /// Format coordinates for display with 6 decimal places

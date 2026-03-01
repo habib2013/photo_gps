@@ -11,7 +11,7 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  final CdlPhotoGpsSDK _sdk = CdlPhotoGpsSDK();
+  late final CdlPhotoGpsSDK _sdk;
   bool _isInitialized = false;
   bool _isCapturing = false;
   String? _errorMessage;
@@ -19,6 +19,15 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize SDK with configuration
+    _sdk = CdlPhotoGpsSDK(
+      config: const SDKConfig(
+        outputFormat: OutputFormat.bytes, // Can be changed to base64 or file
+        detectMockGPS: true, // Enable mock GPS detection
+        gpsTimeout: Duration(seconds: 15),
+        showPermissionRationale: true,
+      ),
+    );
     _initializeSDK();
   }
 
@@ -26,6 +35,11 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       // Check permissions
       if (!await _sdk.hasPermissions()) {
+        // Show rationale before requesting
+        if (_sdk.config.showPermissionRationale) {
+          await _showPermissionRationale();
+        }
+        
         final granted = await _sdk.requestPermissions();
         if (!granted) {
           setState(() {
@@ -49,6 +63,53 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  Future<void> _showPermissionRationale() async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Permissions Required'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.camera_alt, color: Colors.blue),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Camera access is needed to capture client photos',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.location_on, color: Colors.blue),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Location access is needed to verify visit authenticity',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _capturePhoto() async {
     if (_isCapturing) return;
 
@@ -58,9 +119,20 @@ class _CameraScreenState extends State<CameraScreen> {
 
     try {
       // Capture photo with location
-      final result = await _sdk.capturePhotoWithLocation(
-        locationTimeout: const Duration(seconds: 15),
-      );
+      final result = await _sdk.capturePhotoWithLocation();
+
+      if (!mounted) return;
+
+      // Check for mock GPS
+      if (result.isMockLocation) {
+        final proceed = await _showMockGPSWarning(result.locationConfidence);
+        if (!proceed) {
+          setState(() {
+            _isCapturing = false;
+          });
+          return;
+        }
+      }
 
       if (!mounted) return;
 
@@ -72,13 +144,13 @@ class _CameraScreenState extends State<CameraScreen> {
         ),
       );
     } on TimeoutException catch (e) {
-      _showErrorDialog('GPS Timeout', e.toString());
+      _showErrorDialog('GPS Timeout', e.toString(), canRetry: true);
     } on LocationServiceDisabledException catch (e) {
       _showErrorDialog('Location Services Disabled', e.toString());
     } on PermissionDeniedException catch (e) {
       _showErrorDialog('Permission Denied', e.toString());
     } catch (e) {
-      _showErrorDialog('Capture Failed', e.toString());
+      _showErrorDialog('Capture Failed', e.toString(), canRetry: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -86,6 +158,57 @@ class _CameraScreenState extends State<CameraScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _showMockGPSWarning(double confidence) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Mock GPS Detected'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The location appears to be from a fake GPS app.',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Location confidence: ${(confidence * 100).toStringAsFixed(0)}%',
+              style: TextStyle(
+                color: confidence < 0.5 ? Colors.red : Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Do you want to proceed anyway?',
+              style: TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+            child: const Text('Proceed Anyway'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   Future<void> _switchCamera() async {
@@ -99,16 +222,24 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  void _showErrorDialog(String title, String message) {
+  void _showErrorDialog(String title, String message, {bool canRetry = false}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
+          if (canRetry)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _capturePhoto();
+              },
+              child: const Text('Retry'),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: Text(canRetry ? 'Cancel' : 'OK'),
           ),
         ],
       ),
@@ -153,7 +284,14 @@ class _CameraScreenState extends State<CameraScreen> {
     if (!_isInitialized) {
       return const Scaffold(
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Initializing camera...'),
+            ],
+          ),
         ),
       );
     }
@@ -180,13 +318,33 @@ class _CameraScreenState extends State<CameraScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     padding: const EdgeInsets.all(8),
-                    child: const Text(
-                      'GPS Photo Capture',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'GPS Photo Capture',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.verified_user, size: 14, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text(
+                              'Mock GPS Detection: ON',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   if (_sdk.hasMultipleCameras)
@@ -241,7 +399,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // Capturing indicator
+          // Capturing overlay
           if (_isCapturing)
             Container(
               color: Colors.black54,
@@ -252,8 +410,13 @@ class _CameraScreenState extends State<CameraScreen> {
                     CircularProgressIndicator(color: Colors.white),
                     SizedBox(height: 16),
                     Text(
-                      'Capturing photo and getting location...',
+                      'Capturing photo...',
                       style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Getting GPS location and verifying...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
                   ],
                 ),
