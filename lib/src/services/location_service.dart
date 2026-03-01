@@ -68,11 +68,14 @@ class LocationService {
       address = null;
     }
 
+    // Use local time instead of position.timestamp (which might be UTC)
+    final localTimestamp = DateTime.now();
+
     return LocationData(
       latitude: position.latitude,
       longitude: position.longitude,
       accuracy: position.accuracy,
-      timestamp: position.timestamp ?? DateTime.now(),
+      timestamp: localTimestamp, // Use local time
       address: address,
       isMocked: position.isMocked,
     );

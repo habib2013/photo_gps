@@ -1,5 +1,7 @@
 # Quick Integration Guide
 
+**SDK Repository:** https://github.com/habib2013/photo_gps.git
+
 ## 🚀 5-Minute Setup
 
 ### 1. Add Dependency
@@ -7,8 +9,12 @@
 # pubspec.yaml
 dependencies:
   cdl_photo_gps:
-    path: ../cdl_photo_gps
+    git:
+      url: https://github.com/habib2013/photo_gps.git
+      ref: main
 ```
+
+Run: `flutter pub get`
 
 ### 2. Android Permissions
 ```xml

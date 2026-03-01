@@ -8,7 +8,6 @@ import 'services/image_processor.dart';
 import 'services/location_service.dart';
 import 'services/permission_manager.dart';
 import 'services/storage_manager.dart';
-import 'verification/mock_gps_detector.dart';
 import 'utils/format_converter.dart';
 
 /// Main SDK class for GPS Photo Capture functionality.
@@ -58,7 +57,6 @@ class CdlPhotoGpsSDK {
   final ImageProcessor _imageProcessor = ImageProcessor();
   final PermissionManager _permissionManager = PermissionManager();
   final StorageManager _storageManager = StorageManager();
-  final MockGPSDetector _mockGPSDetector = MockGPSDetector();
 
   CdlPhotoGpsSDK({
     this.config = const SDKConfig(),

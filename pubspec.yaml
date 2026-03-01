@@ -1,9 +1,9 @@
 name: cdl_photo_gps
 description: "A Flutter SDK for capturing photos with embedded GPS location information. Automatically overlays coordinates, address, and timestamp directly onto images."
 version: 0.0.1
-homepage: https://github.com/yourusername/cdl_photo_gps
-repository: https://github.com/yourusername/cdl_photo_gps
-issue_tracker: https://github.com/yourusername/cdl_photo_gps/issues
+homepage: https://github.com/habib2013/photo_gps
+repository: https://github.com/habib2013/photo_gps
+issue_tracker: https://github.com/habib2013/photo_gps/issues
 
 environment:
   sdk: ^3.9.2
