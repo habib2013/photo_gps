@@ -16,6 +16,7 @@ class ImageProcessor {
   /// Parameters:
   /// - [photoBytes]: Raw image data as bytes
   /// - [locationData]: Location information to embed
+  /// - [opacity]: Background opacity (0.0-1.0, default: 0.85)
   ///
   /// Returns: Processed image as JPEG bytes with embedded location overlay
   ///
@@ -23,6 +24,7 @@ class ImageProcessor {
   Future<Uint8List> embedLocationOnPhoto({
     required Uint8List photoBytes,
     required LocationData locationData,
+    double opacity = 0.85,
   }) async {
     try {
       // Load image from bytes
@@ -44,6 +46,7 @@ class ImageProcessor {
         image: image,
         text: overlayText,
         fontSize: fontSize,
+        opacity: opacity,
       );
 
       // Encode as JPEG with 85% quality
@@ -72,10 +75,12 @@ class ImageProcessor {
   /// - [image]: Image to draw on
   /// - [text]: Multi-line text to draw
   /// - [fontSize]: Base font size in pixels (used for scaling calculations)
+  /// - [opacity]: Background opacity (0.0-1.0, default: 0.85)
   void _drawTextWithBackground({
     required img.Image image,
     required String text,
     required int fontSize,
+    double opacity = 0.85,
   }) {
     // Split text into lines
     final lines = text.split('\n');
@@ -122,8 +127,8 @@ class ImageProcessor {
       return;
     }
 
-    // Draw semi-transparent black background (0.85 opacity for better readability)
-    final backgroundColor = img.ColorRgba8(0, 0, 0, (255 * 0.85).round());
+    // Draw semi-transparent black background with configurable opacity
+    final backgroundColor = img.ColorRgba8(0, 0, 0, (255 * opacity.clamp(0.0, 1.0)).round());
     img.fillRect(
       image,
       x1: bgX,

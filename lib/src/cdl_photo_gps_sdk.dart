@@ -153,10 +153,11 @@ class CdlPhotoGpsSDK {
       }
     }
 
-    // Embed location on photo
+    // Embed location on photo with configured opacity
     final embeddedPhoto = await _imageProcessor.embedLocationOnPhoto(
       photoBytes: photoBytes,
       locationData: locationData,
+      opacity: config.overlayOpacity,
     );
 
     // Convert to requested format
@@ -226,7 +227,25 @@ class CdlPhotoGpsSDK {
     return await _imageProcessor.embedLocationOnPhoto(
       photoBytes: photoBytes,
       locationData: locationData,
+      opacity: config.overlayOpacity,
     );
+  }
+
+  /// Get current zoom level
+  double get currentZoom => _cameraModule.currentZoom;
+
+  /// Get minimum zoom level
+  double get minZoom => _cameraModule.minZoom;
+
+  /// Get maximum zoom level
+  double get maxZoom => _cameraModule.maxZoom;
+
+  /// Set camera zoom level
+  ///
+  /// Parameters:
+  /// - [zoom]: Zoom level (between minZoom and maxZoom)
+  Future<void> setZoom(double zoom) async {
+    await _cameraModule.setZoom(zoom);
   }
 
   /// Save a photo to device storage

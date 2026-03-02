@@ -15,6 +15,9 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isInitialized = false;
   bool _isCapturing = false;
   String? _errorMessage;
+  double _currentZoom = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 1.0;
 
   @override
   void initState() {
@@ -26,6 +29,7 @@ class _CameraScreenState extends State<CameraScreen> {
         detectMockGPS: true, // Enable mock GPS detection
         gpsTimeout: Duration(seconds: 15),
         showPermissionRationale: true,
+        overlayOpacity: 0.85, // Adjust overlay opacity (0.0-1.0)
       ),
     );
     _initializeSDK();
@@ -55,6 +59,9 @@ class _CameraScreenState extends State<CameraScreen> {
       setState(() {
         _isInitialized = true;
         _errorMessage = null;
+        _minZoom = _sdk.minZoom;
+        _maxZoom = _sdk.maxZoom;
+        _currentZoom = _sdk.currentZoom;
       });
     } catch (e) {
       setState(() {
@@ -300,9 +307,21 @@ class _CameraScreenState extends State<CameraScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Camera preview
+          // Camera preview with pinch-to-zoom
           SizedBox.expand(
-            child: CameraPreview(_sdk.cameraController!),
+            child: GestureDetector(
+              onScaleStart: (details) {
+                _currentZoom = _sdk.currentZoom;
+              },
+              onScaleUpdate: (details) async {
+                final newZoom = (_currentZoom * details.scale).clamp(_minZoom, _maxZoom);
+                await _sdk.setZoom(newZoom);
+                setState(() {
+                  _currentZoom = newZoom;
+                });
+              },
+              child: CameraPreview(_sdk.cameraController!),
+            ),
           ),
 
           // Top bar
@@ -367,35 +386,82 @@ class _CameraScreenState extends State<CameraScreen> {
             bottom: 40,
             left: 0,
             right: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: _isCapturing ? null : _capturePhoto,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 4,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Zoom slider
+                if (_maxZoom > _minZoom)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                        Expanded(
+                          child: Slider(
+                            value: _currentZoom,
+                            min: _minZoom,
+                            max: _maxZoom,
+                            onChanged: (value) async {
+                              await _sdk.setZoom(value);
+                              setState(() {
+                                _currentZoom = value;
+                              });
+                            },
+                            activeColor: Colors.white,
+                            inactiveColor: Colors.white30,
+                          ),
+                        ),
+                        const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_currentZoom.toStringAsFixed(1)}x',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: _isCapturing
-                      ? const Padding(
-                          padding: EdgeInsets.all(20.0),
-                          child: CircularProgressIndicator(
-                            strokeWidth: 3,
-                            color: Colors.blue,
-                          ),
-                        )
-                      : const Icon(
-                          Icons.camera_alt,
-                          size: 40,
-                          color: Colors.blue,
+                const SizedBox(height: 16),
+                // Capture button
+                Center(
+                  child: GestureDetector(
+                    onTap: _isCapturing ? null : _capturePhoto,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(
+                          color: Colors.white,
+                          width: 4,
                         ),
+                      ),
+                      child: _isCapturing
+                          ? const Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: Colors.blue,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.camera_alt,
+                              size: 40,
+                              color: Colors.blue,
+                            ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
 

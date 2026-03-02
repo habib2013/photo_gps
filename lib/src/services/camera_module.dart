@@ -66,10 +66,44 @@ class CameraModule {
     }
 
     try {
+      // Ensure camera is ready
+      if (_controller!.value.isTakingPicture) {
+        throw Exception('Camera is already capturing');
+      }
+
       final XFile image = await _controller!.takePicture();
-      return await image.readAsBytes();
+      final bytes = await image.readAsBytes();
+      
+      return bytes;
     } catch (e) {
       throw Exception('Failed to capture photo: $e');
+    }
+  }
+
+  /// Get current zoom level
+  double get currentZoom => 1.0;
+
+  /// Get minimum zoom level
+  double get minZoom => 1.0;
+
+  /// Get maximum zoom level
+  double get maxZoom => 8.0;
+
+  /// Set zoom level
+  ///
+  /// Parameters:
+  /// - [zoom]: Zoom level (between minZoom and maxZoom)
+  Future<void> setZoom(double zoom) async {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      throw Exception('Camera is not initialized');
+    }
+
+    try {
+      final clampedZoom = zoom.clamp(minZoom, maxZoom);
+      await _controller!.setZoomLevel(clampedZoom);
+    } catch (e) {
+      // Zoom might not be supported on all devices
+      // Silently fail
     }
   }
 

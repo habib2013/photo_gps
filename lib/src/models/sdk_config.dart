@@ -21,6 +21,9 @@ class SDKConfig {
   /// JPEG quality (0-100, default: 85)
   final int imageQuality;
 
+  /// Opacity of the address overlay background (0.0-1.0, default: 0.85)
+  final double overlayOpacity;
+
   const SDKConfig({
     this.outputFormat = OutputFormat.bytes,
     this.detectMockGPS = true,
@@ -29,6 +32,7 @@ class SDKConfig {
     this.showLoadingIndicators = true,
     this.maxImageSize = 2 * 1024 * 1024, // 2MB
     this.imageQuality = 85,
+    this.overlayOpacity = 0.85,
   });
 
   /// Create a copy with updated fields
@@ -40,6 +44,7 @@ class SDKConfig {
     bool? showLoadingIndicators,
     int? maxImageSize,
     int? imageQuality,
+    double? overlayOpacity,
   }) {
     return SDKConfig(
       outputFormat: outputFormat ?? this.outputFormat,
@@ -49,6 +54,7 @@ class SDKConfig {
       showLoadingIndicators: showLoadingIndicators ?? this.showLoadingIndicators,
       maxImageSize: maxImageSize ?? this.maxImageSize,
       imageQuality: imageQuality ?? this.imageQuality,
+      overlayOpacity: overlayOpacity ?? this.overlayOpacity,
     );
   }
 }
